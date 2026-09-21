@@ -8,6 +8,8 @@
 		<string>IslandSwipePrefs</string>
 		<key>cell</key>
 		<string>PSLinkCell</string>
+		<key>icon</key>
+		<string>IslandSwipe.png</string>
 		<key>isController</key>
 		<true/>
 		<key>label</key>
