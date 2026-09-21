@@ -36,10 +36,8 @@
 			<true/>
 			<key>defaults</key>
 			<string>com.c3x14n.islandswipe</string>
-			<key>iconColor</key>
-			<string>#1C1C1E</string>
-			<key>iconSymbol</key>
-			<string>capsule.fill</string>
+			<key>icon</key>
+			<string>IslandSwipe.png</string>
 			<key>key</key>
 			<string>enabled</string>
 			<key>label</key>
