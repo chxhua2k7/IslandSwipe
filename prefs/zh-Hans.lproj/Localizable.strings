@@ -1,0 +1,5 @@
+/* IslandSwipe 设置页。key 是 IslandSwipe.plist 里的英文字符串。 */
+
+"IslandSwipe" = "IslandSwipe";
+"Enabled" = "启用";
+"Lets every Dynamic Island element be swiped away, including the screen recording, hotspot and call pills. Applies immediately." = "让所有灵动岛元素都能向左滑隐藏，包括屏幕录制、个人热点和通话的胶囊。立即生效。";

@@ -1,0 +1,5 @@
+/* IslandSwipe settings page. Keys are the English strings in IslandSwipe.plist. */
+
+"IslandSwipe" = "IslandSwipe";
+"Enabled" = "Enabled";
+"Lets every Dynamic Island element be swiped away, including the screen recording, hotspot and call pills. Applies immediately." = "Lets every Dynamic Island element be swiped away, including the screen recording, hotspot and call pills. Applies immediately.";

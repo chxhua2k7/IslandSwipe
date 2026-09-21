@@ -1,0 +1,5 @@
+/* IslandSwipe 設定ページ。キーは IslandSwipe.plist の英語文字列。 */
+
+"IslandSwipe" = "IslandSwipe";
+"Enabled" = "有効";
+"Lets every Dynamic Island element be swiped away, including the screen recording, hotspot and call pills. Applies immediately." = "画面収録・テザリング・通話のピルを含む、すべての Dynamic Island 要素を左スワイプで隠せるようにします。すぐに反映されます。";
