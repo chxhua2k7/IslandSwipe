@@ -1,9 +1,11 @@
-/* IslandSwipe 設定ページ。キーは IslandSwipe.plist の英語文字列。 */
+/* IslandSwipe settings page. Keys are the English strings in IslandSwipe.plist. */
 
 "IslandSwipe" = "IslandSwipe";
 "Enabled" = "有効";
-"Lets every Dynamic Island element be swiped away, including the screen recording, hotspot and call pills. Applies immediately." = "画面収録・テザリング・通話のピルを含む、すべての Dynamic Island 要素を左スワイプで隠せるようにします。すぐに反映されます。";
-
+"About" = "情報";
+"Version" = "バージョン";
+"Swipe any Dynamic Island element left to hide it, including the screen recording, hotspot and call pills. Swipe right on the empty island to bring it back. Applies immediately." = "画面収録・テザリング・通話のピルを含む、すべての Dynamic Island 要素を左スワイプで隠せます。空の Dynamic Island を右スワイプすると戻ります。すぐに反映されます。";
+"© 2026 chxhua2k7. Licensed under GPL-3.0." = "© 2026 chxhua2k7。GPL-3.0 ライセンス。";
 "Apply" = "適用";
 "Restart SpringBoard to apply?" = "SpringBoard を再起動して適用しますか？";
 "Cancel" = "キャンセル";

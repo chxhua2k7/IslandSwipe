@@ -1,9 +1,11 @@
-/* IslandSwipe 设置页。key 是 IslandSwipe.plist 里的英文字符串。 */
+/* IslandSwipe settings page. Keys are the English strings in IslandSwipe.plist. */
 
 "IslandSwipe" = "IslandSwipe";
 "Enabled" = "启用";
-"Lets every Dynamic Island element be swiped away, including the screen recording, hotspot and call pills. Applies immediately." = "让所有灵动岛元素都能向左滑隐藏，包括屏幕录制、个人热点和通话的胶囊。立即生效。";
-
+"About" = "关于";
+"Version" = "版本";
+"Swipe any Dynamic Island element left to hide it, including the screen recording, hotspot and call pills. Swipe right on the empty island to bring it back. Applies immediately." = "任何灵动岛元素都能向左滑隐藏，包括屏幕录制、个人热点和通话的胶囊。在空的灵动岛上向右滑即可叫回。立即生效。";
+"© 2026 chxhua2k7. Licensed under GPL-3.0." = "© 2026 chxhua2k7。以 GPL-3.0 授权。";
 "Apply" = "应用";
 "Restart SpringBoard to apply?" = "要重启 SpringBoard 应用吗？";
 "Cancel" = "取消";

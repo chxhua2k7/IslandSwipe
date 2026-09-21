@@ -13,8 +13,51 @@
 #import <objc/runtime.h>
 #import <objc/message.h>
 
+#import <Preferences/PSSpecifier.h>
+
+#ifndef IS_VERSION
+#error IS_VERSION comes from PACKAGE_VERSION in the Makefile
+#endif
+
 @interface ISRootListController : PLLocalizedListController
 @end
+
+#pragma mark - Icons(和 NowLyrics 同一套:列上寫 iconSymbol / iconColor,執行期畫成 SF Symbol 圖示)
+
+static const CGFloat kISIconSize = 29;
+static const CGFloat kISIconCornerRadius = 6.5;
+static const CGFloat kISIconGlyphPointSize = 15;
+
+static UIColor *ISColorFromHex(id value) {
+    if (![value isKindOfClass:[NSString class]]) return nil;
+    NSString *digits = [value hasPrefix:@"#"] ? [value substringFromIndex:1] : value;
+    unsigned rgb = 0;
+    if (digits.length != 6 || ![[NSScanner scannerWithString:digits] scanHexInt:&rgb]) return nil;
+    return [UIColor colorWithRed:((rgb >> 16) & 0xFF) / 255.0 green:((rgb >> 8) & 0xFF) / 255.0 blue:(rgb & 0xFF) / 255.0 alpha:1];
+}
+
+static UIImage *ISTileIcon(NSString *symbolName, UIColor *color) {
+    UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration configurationWithPointSize:kISIconGlyphPointSize weight:UIImageSymbolWeightMedium];
+    UIImage *glyph = [[UIImage systemImageNamed:symbolName withConfiguration:configuration]
+                      imageWithTintColor:UIColor.whiteColor renderingMode:UIImageRenderingModeAlwaysOriginal];
+    CGRect tile = CGRectMake(0, 0, kISIconSize, kISIconSize);
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:tile.size];
+    return [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
+        [color setFill];
+        [[UIBezierPath bezierPathWithRoundedRect:tile cornerRadius:kISIconCornerRadius] fill];
+        if (!glyph) return;
+        CGSize size = glyph.size;
+        [glyph drawInRect:CGRectMake((kISIconSize - size.width) / 2, (kISIconSize - size.height) / 2, size.width, size.height)];
+    }];
+}
+
+static void ISApplyIcon(PSSpecifier *specifier) {
+    if ([specifier propertyForKey:PSIconImageKey]) return;
+    NSString *symbol = [specifier propertyForKey:@"iconSymbol"];
+    UIColor *color = ISColorFromHex([specifier propertyForKey:@"iconColor"]);
+    if (![symbol isKindOfClass:[NSString class]] || !color) return;
+    [specifier setProperty:ISTileIcon(symbol, color) forKey:PSIconImageKey];
+}
 
 // 字串放在 PreferenceLoader 的 prefs 資料夾(和 plist 同一份 Localizable.strings)。
 static NSString *ISLocalized(NSString *key) {
@@ -37,6 +80,17 @@ static NSString *ISLocalized(NSString *key) {
                                                                               style:UIBarButtonItemStyleDone
                                                                              target:self
                                                                              action:@selector(isApplyTapped)];
+}
+
+- (NSMutableArray *)specifiers {
+    NSMutableArray *specifiers = [super specifiers];
+    for (PSSpecifier *specifier in specifiers) ISApplyIcon(specifier);
+    return specifiers;
+}
+
+// 「關於」的版本列(plist 的 get = isVersion:)。
+- (NSString *)isVersion:(PSSpecifier *)specifier {
+    return @IS_VERSION;
 }
 
 - (void)isApplyTapped {

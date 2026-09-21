@@ -25,7 +25,7 @@ include $(THEOS_MAKE_PATH)/tweak.mk
 BUNDLE_NAME += IslandSwipePrefs
 
 IslandSwipePrefs_FILES += prefsbundle/ISRootListController.m
-IslandSwipePrefs_CFLAGS += -fobjc-arc -Wall
+IslandSwipePrefs_CFLAGS += -fobjc-arc -Wall -DIS_VERSION=\"$(PACKAGE_VERSION)\"
 IslandSwipePrefs_FRAMEWORKS += UIKit
 IslandSwipePrefs_PRIVATE_FRAMEWORKS += Preferences
 IslandSwipePrefs_INSTALL_PATH = /Library/PreferenceBundles
@@ -38,5 +38,4 @@ include $(THEOS_MAKE_PATH)/bundle.mk
 internal-stage::
 	$(ECHO_NOTHING)mkdir -p "$(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences/IslandSwipe"$(ECHO_END)
 	$(ECHO_NOTHING)cp -R prefs/ "$(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences/IslandSwipe/"$(ECHO_END)
-	$(ECHO_NOTHING)sed -i '' "s/__VERSION__/$(PACKAGE_VERSION)/g" "$(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences/IslandSwipe/IslandSwipe.plist"$(ECHO_END)
 	$(ECHO_NOTHING)sed "s/__VERSION__/$(PACKAGE_VERSION)/g" bundle/Info.plist > "$(THEOS_STAGING_DIR)/Library/PreferenceBundles/IslandSwipePrefs.bundle/Info.plist"$(ECHO_END)
