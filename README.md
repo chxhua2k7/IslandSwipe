@@ -35,3 +35,7 @@ make clean package FINALPACKAGE=1
 - **姓名標示**：使用或修改需註明原作者 chxhua2k7 並附上原始 repo 連結。
 - **非商業性**：不得販售，或用於任何商業目的（含付費 repo）。
 - **相同方式分享**：fork 或修改版必須以同樣授權公開原始碼。
+
+## License
+
+© 2026 chxhua2k7. Licensed under the [GNU GPL v3.0](LICENSE): you may use, modify and redistribute this tweak, but any redistributed version (including modified builds) must be released under the same license with source available.
