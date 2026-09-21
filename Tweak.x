@@ -1,46 +1,64 @@
 // IslandSwipe:讓所有動態島(System Aperture)元件都能向左滑隱藏,再往右滑叫回來。
 //
 // iOS 16.5.1 反組譯出的判斷鏈(SpringBoard / SystemApertureUI):
-//   -[SBSystemApertureViewController _handleResizeResult:withContainerView:] 在滑動結束時
-//   先問 _isInteractiveHidingSupportedByElement: 決定能縮到哪一層 layout mode;到最小層之後
-//   再問 layout overrider 的 isInteractiveDismissalEnabled,回 YES 才把 element assertion
-//   invalidateWithReason:@"removed via pan gesture"(元件整個從動態島移除)。
+//   -[SBSystemApertureViewController _handleResizeResult:withContainerView:] 在往左滑結束時:
+//     floor = _isInteractiveHidingSupportedByElement: ? max(minimumSupportedLayoutMode, 2)
+//                                                      : minimumSupportedLayoutMode
+//     目前 layoutMode > floor  → overrider setPreferredLayoutMode:(layoutMode-1) reason:3(使用者手勢)
+//     已經在 floor            → overrider isInteractiveDismissalEnabled 才把 element assertion 作廢(整個移除)
+//   往右滑且無法再放大時,會找 preferredLayoutModeAssertion 是 reason 3、mode 0 的元件,
+//   把那個 assertion 作廢("User Unhide")→ 元件重新出現。layout mode 0 = 隱藏但仍註冊。
 //   _isInteractiveHidingSupportedByElement: 對代表狀態列 style override 的元件(螢幕錄影、
-//   熱點、通話、定位)一律回 NO;SBSystemApertureSceneElement 則看 Live Activity 自己宣告的
-//   SBUISA_preventsInteractiveDismissal。這裡把這幾個閘門全部打開。
+//   熱點、通話、定位)回 NO;Live Activity 可用 SBUISA_preventsInteractiveDismissal 拒絕移除。
 //
-// 復原:被移除的元件不會自己回來(狀態列 pill 的 provider 透過 clientStorage 以為它還註冊著),
-// 所以把「原本系統不准滑掉、被我們強制移除」的元件記下來,在空的動態島放一個透明的手勢區,
-// 往右滑就用 registerElement: 重新註冊。provider 自己把元件作廢(例如錄影結束)時就從清單移除。
+// 做法:對「系統本來不准滑掉」的元件不走移除(移除會把 scene element 作廢,叫不回來),
+// 而是走系統自己的隱藏:在 _handleResizeResult 期間讓 minimumSupportedLayoutMode 回 0,
+// 並把 reason 3 的縮小直接設成 mode 0。復原用系統的 _axRevealHiddenElementIfPossible。
+// 動態島空著時它的視窗收不到觸控,所以另開一個只蓋住動態島區域的高層級小視窗接往右滑。
 
 #import <UIKit/UIKit.h>
 #import <dlfcn.h>
 #import <objc/runtime.h>
 
-@interface SAUIElementAssertion : NSObject
-@property (readonly, weak, nonatomic) id element;
+@protocol ISElementDismissal <NSObject>
+- (BOOL)isInteractiveDismissalEnabled;
+@end
+
+@interface SAUIPreferredLayoutModeAssertion : NSObject
+@property (readonly, nonatomic) NSInteger layoutModeChangeReason;
+@property (readonly, nonatomic) NSInteger preferredLayoutMode;
+@property (readonly, nonatomic, getter=isValid) BOOL valid;
 @end
 
 @interface SAUILayoutSpecifyingOverrider : NSObject
 @property (readonly, weak, nonatomic) id layoutSpecifyingOverridingTarget;
+@property (readonly, nonatomic) NSInteger layoutMode;
+@property (readonly, nonatomic) SAUIPreferredLayoutModeAssertion *preferredLayoutModeAssertion;
 @end
+
+// SystemApertureUI 匯出的 C 函式:元件 → 它的 layout overrider。
+static SAUILayoutSpecifyingOverrider *(*ISOverriderForElement)(id element);
 
 @interface SBSystemApertureViewController : UIViewController
 @property (readonly, nonatomic) CGRect minimumSensorRegionFrame;
-- (id)registerElement:(id)element;
+- (void)_axRevealHiddenElementIfPossible;
+@end
+
+@interface SBAccessoryWindowScene : UIWindowScene
+@property (nonatomic) UIWindowScene *associatedWindowScene;
 @end
 
 static NSString *const kISPrefsDomain = @"com.c3x14n.islandswipe";
 static NSString *const kISReloadNotification = @"com.c3x14n.islandswipe/ReloadPrefs";
 
 static BOOL gEnabled = YES;
-
 // 系統原本不准滑掉的元件(弱引用;元件消失就自動掉出)。
 static NSHashTable *gForcedElements;
-// 被我們強制移除、等著被叫回來的元件(強引用,順序 = 隱藏順序)。
-static NSMutableArray *gHiddenElements;
+// 被我們設成 mode 0 隱藏、等著叫回來的元件(弱引用)。
+static NSHashTable *gHiddenElements;
+static BOOL gHandlingResize;
 static __weak SBSystemApertureViewController *gApertureVC;
-static UIView *gUnhideView;
+static UIWindow *gUnhideWindow;
 
 static void ISLoadPrefs(void) {
     CFPropertyListRef value = CFPreferencesCopyAppValue(CFSTR("enabled"), (__bridge CFStringRef)kISPrefsDomain);
@@ -52,15 +70,12 @@ static void ISPrefsChanged(CFNotificationCenterRef center, void *observer, CFStr
     ISLoadPrefs();
 }
 
-static void ISMarkForced(id element) {
-    if (!element) return;
-    if (!gForcedElements) gForcedElements = [NSHashTable weakObjectsHashTable];
-    [gForcedElements addObject:element];
+static BOOL ISIsForced(id element) {
+    return element && [gForcedElements containsObject:element];
 }
 
 static void ISForgetHidden(id element) {
-    if (!element) return;
-    [gHiddenElements removeObjectIdenticalTo:element];
+    if (element) [gHiddenElements removeObject:element];
 }
 
 // overrider 的 target 是 element view controller(elementViewProvider.element)或元件本身。
@@ -75,44 +90,70 @@ static id ISElementForOverrider(SAUILayoutSpecifyingOverrider *overrider) {
     return target;
 }
 
+static void ISUpdateUnhideWindow(void);
+
 @interface ISUnhideView : UIView
 @end
 @implementation ISUnhideView
 - (void)unhide:(UISwipeGestureRecognizer *)recognizer {
     SBSystemApertureViewController *vc = gApertureVC;
     if (!vc || gHiddenElements.count == 0) return;
-    // 一次叫回最後一個被隱藏的元件;再滑一次叫下一個。
-    id element = gHiddenElements.lastObject;
-    [gHiddenElements removeLastObject];
-    id assertion = [vc registerElement:element];
-    // 狀態列 pill 的 provider 用 clientStorage 記 assertion,換成新的它才能在錄影結束時作廢。
-    if (assertion && [element respondsToSelector:@selector(setClientStorage:)]) {
-        [element performSelector:@selector(setClientStorage:) withObject:assertion];
-    }
+    // 系統自己的「User Unhide」:找 reason 3 / mode 0 的元件,把它的 preferred layout mode assertion 作廢。
+    [vc _axRevealHiddenElementIfPossible];
     [vc.view setNeedsLayout];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ ISUpdateUnhideWindow(); });
 }
 @end
 
-static void ISUpdateUnhideView(void) {
+// 還在隱藏 = overrider 上仍掛著 reason 3 / mode 0 的 preferred layout mode assertion(系統 User Unhide 找的就是它)。
+static BOOL ISIsStillHidden(id element) {
+    if (!ISOverriderForElement) return YES;
+    SAUILayoutSpecifyingOverrider *overrider = ISOverriderForElement(element);
+    SAUIPreferredLayoutModeAssertion *assertion = overrider.preferredLayoutModeAssertion;
+    BOOL hidden = assertion && assertion.layoutModeChangeReason == 3 && assertion.preferredLayoutMode == 0
+                  && (![assertion respondsToSelector:@selector(isValid)] || assertion.isValid);
+    return hidden;
+}
+
+static void ISPruneHidden(void) {
+    for (id element in gHiddenElements.allObjects) {
+        if (!ISIsStillHidden(element)) [gHiddenElements removeObject:element];
+    }
+}
+
+static void ISUpdateUnhideWindow(void) {
     SBSystemApertureViewController *vc = gApertureVC;
-    if (!vc.isViewLoaded) return;
+    if (!vc.isViewLoaded || !vc.view.window) return;
+    ISPruneHidden();
     if (gHiddenElements.count == 0 || !gEnabled) {
-        [gUnhideView removeFromSuperview];
-        gUnhideView = nil;
+        gUnhideWindow.hidden = YES;
+        gUnhideWindow = nil;
         return;
     }
-    if (!gUnhideView) {
-        gUnhideView = [[ISUnhideView alloc] initWithFrame:CGRectZero];
-        gUnhideView.backgroundColor = UIColor.clearColor;
-        gUnhideView.accessibilityLabel = @"IslandSwipe";
-        UISwipeGestureRecognizer *swipe = [[UISwipeGestureRecognizer alloc] initWithTarget:gUnhideView action:@selector(unhide:)];
-        swipe.direction = UISwipeGestureRecognizerDirectionRight;
-        [gUnhideView addGestureRecognizer:swipe];
+    UIWindowScene *scene = vc.view.window.windowScene;
+    if ([scene respondsToSelector:@selector(associatedWindowScene)]) {
+        UIWindowScene *assoc = [(SBAccessoryWindowScene *)scene associatedWindowScene];
+        if (assoc) scene = assoc;
     }
-    // 放在最底層,有元件顯示時它們的 container view 先拿到觸控。
-    if (gUnhideView.superview != vc.view) [vc.view insertSubview:gUnhideView atIndex:0];
-    // 手勢區 = 感測器區域往外放大一點,方便手指抓到。
-    gUnhideView.frame = CGRectInset(vc.minimumSensorRegionFrame, -24, -12);
+    CGRect frame = CGRectInset(vc.minimumSensorRegionFrame, -24, -12);
+    frame = [vc.view convertRect:frame toCoordinateSpace:vc.view.window.screen.coordinateSpace];
+    if (!gUnhideWindow) {
+        gUnhideWindow = scene ? [[UIWindow alloc] initWithWindowScene:scene] : [[UIWindow alloc] initWithFrame:frame];
+        gUnhideWindow.windowLevel = UIWindowLevelStatusBar + 60;
+        gUnhideWindow.backgroundColor = UIColor.clearColor;
+        ISUnhideView *view = [[ISUnhideView alloc] initWithFrame:CGRectZero];
+        view.backgroundColor = UIColor.clearColor;
+        view.accessibilityLabel = @"IslandSwipe";
+        UISwipeGestureRecognizer *swipe = [[UISwipeGestureRecognizer alloc] initWithTarget:view action:@selector(unhide:)];
+        swipe.direction = UISwipeGestureRecognizerDirectionRight;
+        [view addGestureRecognizer:swipe];
+        UIViewController *root = [UIViewController new];
+        root.view = view;
+        gUnhideWindow.rootViewController = root;
+    }
+    if (!CGRectEqualToRect(gUnhideWindow.frame, frame)) gUnhideWindow.frame = frame;
+    gUnhideWindow.rootViewController.view.frame = gUnhideWindow.bounds;
+    gUnhideWindow.hidden = NO;
 }
 
 %group SpringBoardHooks
@@ -127,40 +168,41 @@ static void ISUpdateUnhideView(void) {
 - (void)viewDidLayoutSubviews {
     %orig;
     if (!gApertureVC) gApertureVC = self;
-    ISUpdateUnhideView();
+    ISUpdateUnhideWindow();
 }
 
-// 狀態列 pill(錄影 / 熱點 / 通話 / 定位)在這裡被擋下。
+// 系統本來就允許移除的元件維持原樣;不允許的改走「縮到 mode 0」的隱藏路徑。
 - (BOOL)_isInteractiveHidingSupportedByElement:(id)element {
     BOOL orig = %orig;
-    if (!gEnabled) return orig;
-    if (!orig) ISMarkForced(element);
-    return YES;
+    if (!gEnabled || !element) return orig;
+    BOOL dismissable = ![element respondsToSelector:@selector(isInteractiveDismissalEnabled)]
+                       || [(id<ISElementDismissal>)element isInteractiveDismissalEnabled];
+    if (orig && dismissable) return orig;
+    if (!gForcedElements) gForcedElements = [NSHashTable weakObjectsHashTable];
+    [gForcedElements addObject:element];
+    return NO;
+}
+
+- (void)_handleResizeResult:(NSInteger)result withContainerView:(id)containerView {
+    gHandlingResize = gEnabled;
+    %orig;
+    gHandlingResize = NO;
+    dispatch_async(dispatch_get_main_queue(), ^{ ISUpdateUnhideWindow(); });
 }
 
 %end
 
 %hook SBSystemApertureSceneElement
-// Live Activity 透過 scene client settings 的 SBUISA_preventsInteractiveDismissal 選擇退出。
-- (BOOL)isInteractiveDismissalEnabled {
-    BOOL orig = %orig;
-    if (!gEnabled) return orig;
-    if (!orig) ISMarkForced(self);
-    return YES;
-}
 - (void)invalidate {
     ISForgetHidden(self);
     %orig;
-    ISUpdateUnhideView();
 }
 %end
 
 %hook SBSystemApertureStatusBarPillElementProvider
-// 錄影 / 熱點結束時 provider 自己作廢元件,就不能再叫回來了。
 - (void)_invalidateElement:(id)element withReason:(id)reason {
     ISForgetHidden(element);
     %orig;
-    ISUpdateUnhideView();
 }
 %end
 
@@ -169,34 +211,30 @@ static void ISUpdateUnhideView(void) {
 %group SystemApertureUIHooks
 
 %hook SAUILayoutSpecifyingOverrider
-// _handleResizeResult:withContainerView: 最後真正的閘門。
-- (BOOL)isInteractiveDismissalEnabled {
-    BOOL orig = %orig;
+
+// 處理滑動結果的期間放寬到 0(讓 _handleResizeResult 的 floor 變成 0);
+// 已隱藏的元件也一直維持 0,否則系統會把 mode 0 夾回最小值。
+- (NSInteger)minimumSupportedLayoutMode {
+    NSInteger orig = %orig;
     if (!gEnabled) return orig;
-    if (!orig) ISMarkForced(ISElementForOverrider(self));
-    return YES;
+    id element = ISElementForOverrider(self);
+    if ((gHandlingResize && ISIsForced(element)) || [gHiddenElements containsObject:element]) return 0;
+    return orig;
 }
-%end
 
-%hook SAUILayoutSpecifyingElementViewController
-- (BOOL)isInteractiveDismissalEnabled {
-    return gEnabled ? YES : %orig;
-}
-%end
-
-%hook SAUIElementAssertion
-// 滑掉 = 這個 assertion 被作廢。只記住原本不准滑掉的元件,系統本來就允許的維持原樣。
-- (void)invalidateWithReason:(NSString *)reason layoutModeChangeReason:(NSInteger)changeReason {
-    id element = [(SAUIElementAssertion *)self element];
-    if (gEnabled && element && [reason isKindOfClass:NSString.class] && [reason containsString:@"pan gesture"]
-        && [gForcedElements containsObject:element]) {
-        if (!gHiddenElements) gHiddenElements = [NSMutableArray array];
-        [gHiddenElements removeObjectIdenticalTo:element];
+// 使用者往左滑(reason 3)要縮小時,直接縮到 0(隱藏),不用一格一格滑。
+- (void)setPreferredLayoutMode:(NSInteger)mode reason:(NSInteger)reason {
+    id element = ISElementForOverrider(self);
+    NSInteger current = [(SAUILayoutSpecifyingOverrider *)self layoutMode];
+    if (gHandlingResize && reason == 3 && mode < current && ISIsForced(element)) {
+        if (!gHiddenElements) gHiddenElements = [NSHashTable weakObjectsHashTable];
         [gHiddenElements addObject:element];
+        %orig(0, reason);
+        return;
     }
     %orig;
-    dispatch_async(dispatch_get_main_queue(), ^{ ISUpdateUnhideView(); });
 }
+
 %end
 
 %end
@@ -210,16 +248,12 @@ static void ISUpdateUnhideView(void) {
 
         %init(SpringBoardHooks);
 
-        // SpringBoard 載入時 SystemApertureUI 可能還沒進來,先手動載入再取 class。
         dlopen("/System/Library/PrivateFrameworks/SystemApertureUI.framework/SystemApertureUI", RTLD_NOW);
         Class overrider = objc_getClass("SAUILayoutSpecifyingOverrider");
-        Class elementVC = objc_getClass("SAUILayoutSpecifyingElementViewController");
-        Class assertion = objc_getClass("SAUIElementAssertion");
-        if (overrider && elementVC && assertion) {
-            %init(SystemApertureUIHooks,
-                  SAUILayoutSpecifyingOverrider = overrider,
-                  SAUILayoutSpecifyingElementViewController = elementVC,
-                  SAUIElementAssertion = assertion);
+        ISOverriderForElement = (SAUILayoutSpecifyingOverrider *(*)(id))dlsym(RTLD_DEFAULT, "SAUILayoutSpecifyingOverriderForElement");
+        if (!ISOverriderForElement) NSLog(@"[IslandSwipe] SAUILayoutSpecifyingOverriderForElement not found");
+        if (overrider) {
+            %init(SystemApertureUIHooks, SAUILayoutSpecifyingOverrider = overrider);
         } else {
             NSLog(@"[IslandSwipe] SystemApertureUI classes not found; only SpringBoard hooks are active");
         }
