@@ -28,14 +28,7 @@ Live Activity 則靠 `SBUISA_preventsInteractiveDismissal` 退出。直接放行
 make clean package FINALPACKAGE=1
 ```
 
-## 授權
-
-本專案以 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-Hant) 授權（全文見 [LICENSE](LICENSE)）：
-
-- **姓名標示**：使用或修改需註明原作者 chxhua2k7 並附上原始 repo 連結。
-- **非商業性**：不得販售，或用於任何商業目的（含付費 repo）。
-- **相同方式分享**：fork 或修改版必須以同樣授權公開原始碼。
-
 ## License
 
-© 2026 chxhua2k7. Licensed under the [GNU GPL v3.0](LICENSE): you may use, modify and redistribute this tweak, but any redistributed version (including modified builds) must be released under the same license with source available.
+© 2026 chxhua2k7. 根據[GNU GPL v3.0](LICENSE)授權：您可以使用、修改和重新分發此調整，但任何重新分發的版本（包括修改後的版本）都必須根據相同的授權發布，並且提供原始碼。
+
