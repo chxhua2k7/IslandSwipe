@@ -4,9 +4,15 @@
 <dict>
 	<key>entry</key>
 	<dict>
+		<key>bundle</key>
+		<string>IslandSwipePrefs</string>
 		<key>cell</key>
 		<string>PSLinkCell</string>
+		<key>isController</key>
+		<true/>
 		<key>label</key>
+		<string>IslandSwipe</string>
+		<key>pl_alt_plist_name</key>
 		<string>IslandSwipe</string>
 	</dict>
 	<key>title</key>

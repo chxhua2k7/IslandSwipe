@@ -18,10 +18,25 @@ IslandSwipe_CFLAGS += -fobjc-arc -Wall -DIS_VERSION=\"$(PACKAGE_VERSION)\"
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 
-# 設定頁是純 plist 的 PreferenceLoader 頁(PSListController + 一個開關),不需要 preference bundle。
+# 設定頁:prefs/ 裡是 IslandSwipe.plist(entry + items)和各語言的 Localizable.strings;
+# IslandSwipePrefs.bundle 是真的 preference bundle,主類別 ISRootListController 繼承 libprefs 的
+# PLLocalizedListController,只加右上角「套用」(respring)按鈕。libprefs 由 <libprefs/prefs.h> 的
+# module map 自動連結(@rpath,Theos 的 rootless rpath 指到 /var/jb/usr/lib)。
+BUNDLE_NAME += IslandSwipePrefs
+
+IslandSwipePrefs_FILES += prefsbundle/ISRootListController.m
+IslandSwipePrefs_CFLAGS += -fobjc-arc -Wall
+IslandSwipePrefs_FRAMEWORKS += UIKit
+IslandSwipePrefs_PRIVATE_FRAMEWORKS += Preferences
+IslandSwipePrefs_INSTALL_PATH = /Library/PreferenceBundles
+IslandSwipePrefs_RESOURCE_DIRS = bundle
+
+include $(THEOS_MAKE_PATH)/bundle.mk
+
 # PreferenceLoader 會遞迴掃描 Preferences/ 底下所有 .plist,plist 所在的資料夾就是它的
 # 來源 bundle,PLLocalizedListController 從那裡讀各語言的 Localizable.strings。
 internal-stage::
 	$(ECHO_NOTHING)mkdir -p "$(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences/IslandSwipe"$(ECHO_END)
 	$(ECHO_NOTHING)cp -R prefs/ "$(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences/IslandSwipe/"$(ECHO_END)
 	$(ECHO_NOTHING)sed -i '' "s/__VERSION__/$(PACKAGE_VERSION)/g" "$(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences/IslandSwipe/IslandSwipe.plist"$(ECHO_END)
+	$(ECHO_NOTHING)sed "s/__VERSION__/$(PACKAGE_VERSION)/g" bundle/Info.plist > "$(THEOS_STAGING_DIR)/Library/PreferenceBundles/IslandSwipePrefs.bundle/Info.plist"$(ECHO_END)

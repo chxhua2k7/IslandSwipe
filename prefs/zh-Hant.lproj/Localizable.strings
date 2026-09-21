@@ -3,3 +3,8 @@
 "IslandSwipe" = "IslandSwipe";
 "Enabled" = "啟用";
 "Lets every Dynamic Island element be swiped away, including the screen recording, hotspot and call pills. Applies immediately." = "讓所有動態島元件都能向左滑隱藏，包括螢幕錄影、個人熱點和通話的膠囊。立即生效。";
+
+"Apply" = "套用";
+"Restart SpringBoard to apply?" = "要重啟 SpringBoard 套用嗎？";
+"Cancel" = "取消";
+"Respring" = "重啟";
