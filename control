@@ -3,6 +3,7 @@ Name: IslandSwipe
 Version: 1.0.0
 Architecture: iphoneos-arm64
 Description: Lets every Dynamic Island element be swiped away, including the screen recording, hotspot and call pills and Live Activities that opt out of dismissal.
+Homepage: https://github.com/chxhua2k7/IslandSwipe
 Depends: mobilesubstrate, preferenceloader
 Maintainer: chxhua2k7 <xianghuachen2007@icloud.com>
 Author: chxhua2k7 <xianghuachen2007@icloud.com>

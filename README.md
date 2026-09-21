@@ -27,3 +27,11 @@ Live Activity 則靠 `SBUISA_preventsInteractiveDismissal` 退出。直接放行
 ```sh
 make clean package FINALPACKAGE=1
 ```
+
+## 授權
+
+本專案以 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-Hant) 授權（全文見 [LICENSE](LICENSE)）：
+
+- **姓名標示**：使用或修改需註明原作者 chxhua2k7 並附上原始 repo 連結。
+- **非商業性**：不得販售，或用於任何商業目的（含付費 repo）。
+- **相同方式分享**：fork 或修改版必須以同樣授權公開原始碼。
