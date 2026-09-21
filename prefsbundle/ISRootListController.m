@@ -53,6 +53,14 @@ static UIImage *ISTileIcon(NSString *symbolName, UIColor *color) {
 
 static void ISApplyIcon(PSSpecifier *specifier) {
     if ([specifier propertyForKey:PSIconImageKey]) return;
+    // `icon`:PreferenceLoader 只會替清單入口讀這個 key;頁內的列要自己從 preference bundle 載入。
+    NSString *file = [specifier propertyForKey:@"icon"];
+    if ([file isKindOfClass:[NSString class]]) {
+        UIImage *image = [UIImage imageNamed:file.stringByDeletingPathExtension
+                                    inBundle:[NSBundle bundleForClass:ISRootListController.class]
+               compatibleWithTraitCollection:nil];
+        if (image) { [specifier setProperty:image forKey:PSIconImageKey]; return; }
+    }
     NSString *symbol = [specifier propertyForKey:@"iconSymbol"];
     UIColor *color = ISColorFromHex([specifier propertyForKey:@"iconColor"]);
     if (![symbol isKindOfClass:[NSString class]] || !color) return;
