@@ -4,7 +4,7 @@
 "Enabled" = "启用";
 "About" = "关于";
 "Version" = "版本";
-"Swipe any Dynamic Island element left to hide it, including the screen recording, hotspot and call pills. Swipe right on the empty island to bring it back. "Hide island when idle" stops drawing the black pill around the sensors when nothing is shown. Applies immediately." = "任何灵动岛元素都能向左滑隐藏，包括屏幕录制、个人热点和通话的胶囊。在空的灵动岛上向右滑即可叫回。「空闲时隐藏灵动岛」会在没有内容显示时不绘制传感器外围的黑色胶囊。立即生效。";
+"Swipe any Dynamic Island element left to hide it, including the screen recording, hotspot and call pills. Swipe right on the empty island to bring it back. \"Hide island when idle\" stops drawing the black pill around the sensors when nothing is shown. Applies immediately." = "任何灵动岛元素都能向左滑隐藏，包括屏幕录制、个人热点和通话的胶囊。在空的灵动岛上向右滑即可叫回。「空闲时隐藏灵动岛」会在没有内容显示时不绘制传感器外围的黑色胶囊。立即生效。";
 "Hide island when idle" = "空闲时隐藏灵动岛";
 "© 2026 chxhua2k7. Licensed under GPL-3.0." = "© 2026 chxhua2k7。以 GPL-3.0 授权。";
 "Apply" = "应用";

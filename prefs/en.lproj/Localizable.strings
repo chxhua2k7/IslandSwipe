@@ -4,7 +4,7 @@
 "Enabled" = "Enabled";
 "About" = "About";
 "Version" = "Version";
-"Swipe any Dynamic Island element left to hide it, including the screen recording, hotspot and call pills. Swipe right on the empty island to bring it back. "Hide island when idle" stops drawing the black pill around the sensors when nothing is shown. Applies immediately." = "Swipe any Dynamic Island element left to hide it, including the screen recording, hotspot and call pills. Swipe right on the empty island to bring it back. "Hide island when idle" stops drawing the black pill around the sensors when nothing is shown. Applies immediately.";
+"Swipe any Dynamic Island element left to hide it, including the screen recording, hotspot and call pills. Swipe right on the empty island to bring it back. \"Hide island when idle\" stops drawing the black pill around the sensors when nothing is shown. Applies immediately." = "Swipe any Dynamic Island element left to hide it, including the screen recording, hotspot and call pills. Swipe right on the empty island to bring it back. \"Hide island when idle\" stops drawing the black pill around the sensors when nothing is shown. Applies immediately.";
 "Hide island when idle" = "Hide island when idle";
 "© 2026 chxhua2k7. Licensed under GPL-3.0." = "© 2026 chxhua2k7. Licensed under GPL-3.0.";
 "Apply" = "Apply";
