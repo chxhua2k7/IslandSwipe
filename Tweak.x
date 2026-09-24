@@ -306,10 +306,10 @@ static void ISUpdateIdleHiding(BOOL animated) {
     CGFloat alpha = ISIdleHidden() ? 0 : 1;
     NSArray *parents = ISBackgroundParents();
     void (^apply)(void) = ^{
-        for (UIView *view in parents) view.alpha = alpha;
-        for (UIView *view in gContainerViews.allObjects) view.alpha = alpha;
-        for (UIView *view in gGainMapViews.allObjects) view.layer.opacity = alpha;
-        for (UIView *view in gCurtainViews.allObjects) view.layer.opacity = alpha;
+        for (UIView *view in parents) if (view.alpha != alpha) view.alpha = alpha;
+        for (UIView *view in gContainerViews.allObjects) if (view.alpha != alpha) view.alpha = alpha;
+        for (UIView *view in gGainMapViews.allObjects) if (view.layer.opacity != alpha) view.layer.opacity = alpha;
+        for (UIView *view in gCurtainViews.allObjects) if (view.layer.opacity != alpha) view.layer.opacity = alpha;
     };
     if (animated) [UIView animateWithDuration:0.25 delay:0 options:UIViewAnimationOptionBeginFromCurrentState animations:apply completion:nil];
     else apply();
@@ -344,17 +344,18 @@ static void ISUpdateIdleHiding(BOOL animated) {
     self = %orig;
     if (self) {
         ISAddWeak(&gGainMapViews, self);
-        self.layer.opacity = ISIdleHidden() ? 0 : 1;
+        if (ISIdleHidden()) self.layer.opacity = 0;
     }
     return self;
 }
 %end
 
+// 有內容時完全不碰這些圖層(轉場期間系統正在對它們做動畫,重設會打斷),只在空閒時壓成 0。
 %hook _SBSystemApertureMagiciansCurtainView
 - (void)layoutSubviews {
     %orig;
     ISAddWeak(&gCurtainViews, self);
-    self.layer.opacity = ISIdleHidden() ? 0 : 1;
+    if (ISIdleHidden() && self.layer.opacity != 0) self.layer.opacity = 0;
 }
 %end
 
@@ -362,8 +363,7 @@ static void ISUpdateIdleHiding(BOOL animated) {
 - (void)layoutSubviews {
     %orig;
     ISAddWeak(&gContainerViews, self);
-    CGFloat alpha = ISIdleHidden() ? 0 : 1;
-    if (self.alpha != alpha) self.alpha = alpha;
+    if (ISIdleHidden() && self.alpha != 0) self.alpha = 0;
 }
 %end
 
