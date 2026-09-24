@@ -17,6 +17,7 @@
 // 動態島空著時它的視窗收不到觸控,所以另開一個只蓋住動態島區域的高層級小視窗接往右滑。
 
 #import <UIKit/UIKit.h>
+#import <QuartzCore/QuartzCore.h>
 #import <dlfcn.h>
 #import <objc/runtime.h>
 
@@ -80,10 +81,33 @@ static CGFloat ISContainerAlpha(void) {
     return (gEnabled && gHideIdle && !gHasContent) ? 0 : 1;
 }
 
+// 空閒時那圈黑色是 _containerSubBackgroundParent 底下每個 container 的背景 view
+// (_SBSystemApertureGainMapView,gain-map 純黑)畫的;_containerBackgroundParent 放 curtain 和 key line。
+// container 本身只放內容。空閒時把這兩層底下的 view 全部淡出。
+static NSArray<UIView *> *ISBackgroundViews(void) {
+    SBSystemApertureViewController *vc = gApertureVC;
+    if (!vc) return @[];
+    NSMutableArray *views = [NSMutableArray array];
+    for (NSString *ivar in @[@"_containerSubBackgroundParent", @"_containerBackgroundParent"]) {
+        Ivar i = class_getInstanceVariable(object_getClass(vc), ivar.UTF8String);
+        UIView *parent = i ? object_getIvar(vc, i) : nil;
+        if ([parent isKindOfClass:UIView.class]) [views addObjectsFromArray:parent.subviews];
+    }
+    // curtain 有兩層:一層在動態島視窗,另一層在「Super High Level」視窗(不在上面兩個父容器裡)。
+    for (NSString *ivar in @[@"_magiciansCurtainView", @"_highLevelMagiciansCurtainView"]) {
+        Ivar i = class_getInstanceVariable(object_getClass(vc), ivar.UTF8String);
+        UIView *view = i ? object_getIvar(vc, i) : nil;
+        if ([view isKindOfClass:UIView.class] && ![views containsObject:view]) [views addObject:view];
+    }
+    return views;
+}
+
 static void ISUpdateIdleHiding(BOOL animated) {
     CGFloat alpha = ISContainerAlpha();
+    NSArray *backgrounds = ISBackgroundViews();
     void (^apply)(void) = ^{
         for (UIView *view in gContainerViews.allObjects) view.alpha = alpha;
+        for (UIView *view in backgrounds) view.alpha = alpha;
     };
     if (animated) [UIView animateWithDuration:0.25 delay:0 options:UIViewAnimationOptionBeginFromCurrentState animations:apply completion:nil];
     else apply();
