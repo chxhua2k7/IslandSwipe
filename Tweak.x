@@ -48,6 +48,53 @@ static SAUILayoutSpecifyingOverrider *(*ISOverriderForElement)(id element);
 @interface SBSystemApertureContainerView : UIView
 @end
 
+@interface SpringBoard : UIApplication
+@end
+
+static UIView *gPlaceholderView;
+static NSDate *gDuoFoldModified;
+static BOOL gDuoFoldActive;
+
+// DuoFold(com.c3x14n.duofold)折疊時會對視窗套 transform / 模糊,碰到真的 CAGainMapLayer 會讓
+// backboardd 的 gain encoder 崩潰(IOMFBgainencoder_finish)。它開著的時候就不放佔位 layer。
+static NSString *ISDuoFoldConfigPath(void) {
+    for (NSString *path in @[@"/var/mobile/Library/ControlCenter/DuoFold.plist", @"/var/jb/var/mobile/Library/ControlCenter/DuoFold.plist"]) {
+        if ([NSFileManager.defaultManager fileExistsAtPath:path]) return path;
+    }
+    return nil;
+}
+
+static BOOL ISDuoFoldEnabled(void) {
+    // 套件移除後設定檔會留著,所以要先確認 dylib 還在。
+    BOOL installed = NO;
+    for (NSString *dylib in @[@"/var/jb/Library/MobileSubstrate/DynamicLibraries/DuoFold.dylib", @"/Library/MobileSubstrate/DynamicLibraries/DuoFold.dylib"]) {
+        if ([NSFileManager.defaultManager fileExistsAtPath:dylib]) { installed = YES; break; }
+    }
+    if (!installed) return NO;
+    NSString *path = ISDuoFoldConfigPath();
+    if (!path) return NO;
+    NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:path];
+    id enabled = dict[@"Enabled"];
+    return [enabled respondsToSelector:@selector(boolValue)] ? [enabled boolValue] : NO;
+}
+
+@interface _SBGainMapView : UIView
+@end
+
+@interface _SBSystemApertureMagiciansCurtainView : UIView
+@end
+
+@interface CALayer (ISUndocumented)
+@property (atomic, assign) NSUInteger disableUpdateMask;
+@end
+
+// 普通 CALayer 假扮 CAGainMapLayer:SpringBoard 會對它設 renderMode 之類的屬性,吃掉就好。
+@interface ISFakeGainMapLayer : CALayer
+@property (nonatomic, copy) NSString *renderMode;
+@end
+@implementation ISFakeGainMapLayer
+@end
+
 @interface SBAccessoryWindowScene : UIWindowScene
 @property (nonatomic) UIWindowScene *associatedWindowScene;
 @end
@@ -56,6 +103,7 @@ static NSString *const kISPrefsDomain = @"com.c3x14n.islandswipe";
 static NSString *const kISReloadNotification = @"com.c3x14n.islandswipe/ReloadPrefs";
 
 static BOOL gEnabled = YES;
+
 // 空閒時不畫黑色膠囊(只剩硬體的洞)。
 static BOOL gHideIdle = YES;
 static BOOL gHasContent = YES;
@@ -81,33 +129,20 @@ static CGFloat ISContainerAlpha(void) {
     return (gEnabled && gHideIdle && !gHasContent) ? 0 : 1;
 }
 
-// 空閒時那圈黑色是 _containerSubBackgroundParent 底下每個 container 的背景 view
-// (_SBSystemApertureGainMapView,gain-map 純黑)畫的;_containerBackgroundParent 放 curtain 和 key line。
-// container 本身只放內容。空閒時把這兩層底下的 view 全部淡出。
-static NSArray<UIView *> *ISBackgroundViews(void) {
-    SBSystemApertureViewController *vc = gApertureVC;
-    if (!vc) return @[];
-    NSMutableArray *views = [NSMutableArray array];
-    for (NSString *ivar in @[@"_containerSubBackgroundParent", @"_containerBackgroundParent"]) {
-        Ivar i = class_getInstanceVariable(object_getClass(vc), ivar.UTF8String);
-        UIView *parent = i ? object_getIvar(vc, i) : nil;
-        if ([parent isKindOfClass:UIView.class]) [views addObjectsFromArray:parent.subviews];
-    }
-    // curtain 有兩層:一層在動態島視窗,另一層在「Super High Level」視窗(不在上面兩個父容器裡)。
-    for (NSString *ivar in @[@"_magiciansCurtainView", @"_highLevelMagiciansCurtainView"]) {
-        Ivar i = class_getInstanceVariable(object_getClass(vc), ivar.UTF8String);
-        UIView *view = i ? object_getIvar(vc, i) : nil;
-        if ([view isKindOfClass:UIView.class] && ![views containsObject:view]) [views addObject:view];
-    }
-    return views;
-}
+// 空閒時那圈黑色(兩個硬體缺口之間被塗黑的像素)是 CAGainMapLayer 畫的:SpringBoard 建立的第一個
+// _SBGainMapView 會變成 backboardd 顯示層級的遮罩,截圖截不到、alpha/hidden 都不理。
+// 做法沿用 DynamicNotLand(verygenericname,GPL):啟動時先建一個 1x1 的假 _SBGainMapView 佔掉這個名額,
+// 之後的 _SBGainMapView 都改用普通 CALayer(黑色背景),就能用 opacity 淡出。
+static BOOL gFirstGainMapLayer;          // 第一個 layerClass 請求給真的 CAGainMapLayer(那個 1x1 假 view)
+static NSHashTable *gGainMapViews;       // 之後建立的 _SBGainMapView
+static NSHashTable *gCurtainViews;
 
 static void ISUpdateIdleHiding(BOOL animated) {
     CGFloat alpha = ISContainerAlpha();
-    NSArray *backgrounds = ISBackgroundViews();
     void (^apply)(void) = ^{
         for (UIView *view in gContainerViews.allObjects) view.alpha = alpha;
-        for (UIView *view in backgrounds) view.alpha = alpha;
+        for (UIView *view in gGainMapViews.allObjects) view.layer.opacity = alpha;
+        for (UIView *view in gCurtainViews.allObjects) view.layer.opacity = alpha;
     };
     if (animated) [UIView animateWithDuration:0.25 delay:0 options:UIViewAnimationOptionBeginFromCurrentState animations:apply completion:nil];
     else apply();
@@ -240,22 +275,11 @@ static void ISUpdateUnhideWindow(void) {
 
 %end
 
-// 動態島有沒有內容:沒有時把 container view(空閒時那圈黑色膠囊)整個淡出。
 %hook SBSystemApertureController
 - (void)systemApertureViewController:(id)viewController containsAnyContent:(BOOL)containsAnyContent {
     %orig;
     gHasContent = containsAnyContent;
     ISUpdateIdleHiding(YES);
-}
-%end
-
-%hook SBSystemApertureContainerView
-- (void)layoutSubviews {
-    %orig;
-    if (!gContainerViews) gContainerViews = [NSHashTable weakObjectsHashTable];
-    [gContainerViews addObject:self];
-    CGFloat alpha = ISContainerAlpha();
-    if (self.alpha != alpha) self.alpha = alpha;
 }
 %end
 
@@ -306,6 +330,110 @@ static void ISUpdateUnhideWindow(void) {
 
 %end
 
+// 建立 / 拆掉佔位 gain-map view。有它,backboardd 就不會自己畫預設的黑色動態島。
+static void ISUpdatePlaceholder(BOOL launching) {
+    BOOL duoFold = ISDuoFoldEnabled();
+    if (duoFold == gDuoFoldActive && !launching) return;
+    gDuoFoldActive = duoFold;
+    if (duoFold) {
+        if (gPlaceholderView) {
+            [gPlaceholderView removeFromSuperview];
+            gPlaceholderView = nil;
+        }
+        return;
+    }
+    if (gPlaceholderView) return;
+    // 放在主畫面的 SBRootSceneWindow(DynamicNotLand 的做法)。放進動態島自己的 scene 開新視窗會讓 backboardd 崩。
+    UIView *host = nil;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    for (UIWindow *window in UIApplication.sharedApplication.windows) {
+        if ([window isKindOfClass:objc_getClass("SBRootSceneWindow")]) { host = window; break; }
+    }
+#pragma clang diagnostic pop
+    if (!host) return;
+    gFirstGainMapLayer = YES;
+    gPlaceholderView = [[objc_getClass("_SBGainMapView") alloc] initWithFrame:CGRectMake(-1.3, -0.9, 1, 1)];
+    gPlaceholderView.backgroundColor = nil;
+    gPlaceholderView.userInteractionEnabled = NO;
+    gPlaceholderView.layer.disableUpdateMask |= 18;
+    [host addSubview:gPlaceholderView];
+}
+
+// 「空閒時隱藏動態島」:要在 SpringBoard 啟動時就換掉 layerClass,所以切換後需要 respring。
+%group IdleHooks
+
+%hook SpringBoard
+- (void)applicationDidFinishLaunching:(UIApplication *)application {
+    %orig;
+    ISUpdatePlaceholder(YES);
+    // DuoFold 可能在執行中切換:每 2 秒看一次它的設定檔有沒有改。
+    [NSTimer scheduledTimerWithTimeInterval:2 repeats:YES block:^(NSTimer *timer) {
+        NSString *path = ISDuoFoldConfigPath();
+        NSDate *modified = path ? [NSFileManager.defaultManager attributesOfItemAtPath:path error:nil].fileModificationDate : nil;
+        if (modified == gDuoFoldModified || [modified isEqualToDate:gDuoFoldModified]) return;
+        gDuoFoldModified = modified;
+        ISUpdatePlaceholder(NO);
+    }];
+}
+%end
+
+%hook _SBGainMapView
++ (Class)layerClass {
+    if (gFirstGainMapLayer) {
+        gFirstGainMapLayer = NO;
+        return %orig;
+    }
+    return ISFakeGainMapLayer.class;
+}
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = %orig;
+    if (self && [self.layer isKindOfClass:ISFakeGainMapLayer.class]) {
+        self.backgroundColor = UIColor.blackColor;
+        if (!gGainMapViews) gGainMapViews = [NSHashTable weakObjectsHashTable];
+        [gGainMapViews addObject:self];
+        self.layer.opacity = ISContainerAlpha();
+    }
+    return self;
+}
+%end
+
+%hook _SBSystemApertureMagiciansCurtainView
+- (void)layoutSubviews {
+    %orig;
+    if (!gCurtainViews) gCurtainViews = [NSHashTable weakObjectsHashTable];
+    [gCurtainViews addObject:self];
+    self.layer.opacity = ISContainerAlpha();
+}
+%end
+
+%hook SBSystemApertureContainerView
+- (void)layoutSubviews {
+    %orig;
+    if (!gContainerViews) gContainerViews = [NSHashTable weakObjectsHashTable];
+    [gContainerViews addObject:self];
+    CGFloat alpha = ISContainerAlpha();
+    if (self.alpha != alpha) self.alpha = alpha;
+}
+// 空閒時不要把 container 縮回感測器大小(那個縮小動畫會把黑色帶回來)。
+- (void)setFrame:(CGRect)frame {
+    if (!gHasContent && gEnabled && gHideIdle) return;
+    %orig;
+}
+%end
+
+// 空閒時點動態島不要有震動回饋(那裡已經沒東西了)。
+%hook SBSystemApertureViewController
++ (id)_sharedFeedbackGenerator {
+    return (!gHasContent && gEnabled && gHideIdle) ? nil : %orig;
+}
+- (BOOL)_handleImpactFeedbackAction:(id)action {
+    return (!gHasContent && gEnabled && gHideIdle) ? NO : %orig;
+}
+%end
+
+%end
+
 %ctor {
     @autoreleasepool {
         ISLoadPrefs();
@@ -314,6 +442,7 @@ static void ISUpdateUnhideWindow(void) {
                                         CFNotificationSuspensionBehaviorDeliverImmediately);
 
         %init(SpringBoardHooks);
+        if (gHideIdle) %init(IdleHooks);
 
         dlopen("/System/Library/PrivateFrameworks/SystemApertureUI.framework/SystemApertureUI", RTLD_NOW);
         Class overrider = objc_getClass("SAUILayoutSpecifyingOverrider");

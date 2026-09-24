@@ -4,10 +4,11 @@
 "Enabled" = "有効";
 "About" = "情報";
 "Version" = "バージョン";
-"Swipe any Dynamic Island element left to hide it, including the screen recording, hotspot and call pills. Swipe right on the empty island to bring it back. \"Hide island when idle\" stops drawing the black pill around the sensors when nothing is shown. Applies immediately." = "画面収録・テザリング・通話のピルを含む、すべての Dynamic Island 要素を左スワイプで隠せます。空の Dynamic Island を右スワイプすると戻ります。「待機中は Dynamic Island を隠す」を有効にすると、何も表示していないときはセンサー周りの黒いピルを描画しません。すぐに反映されます。";
 "Hide island when idle" = "待機中は Dynamic Island を隠す";
 "© 2026 chxhua2k7. Licensed under GPL-3.0." = "© 2026 chxhua2k7。GPL-3.0 ライセンス。";
 "Apply" = "適用";
 "Restart SpringBoard to apply?" = "SpringBoard を再起動して適用しますか？";
 "Cancel" = "キャンセル";
 "Respring" = "再起動";
+"Swipe any element left to hide it. Swipe right on the empty island to bring it back." = "どの要素も左スワイプで隠せます。空の Dynamic Island を右スワイプすると戻ります。";
+"Leaves only the sensor cutouts when nothing is shown. Tap Apply after changing." = "何も表示していないときはセンサーの穴だけを残します。切り替え後は「適用」をタップしてください。";

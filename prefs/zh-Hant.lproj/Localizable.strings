@@ -4,10 +4,11 @@
 "Enabled" = "啟用";
 "About" = "關於";
 "Version" = "版本";
-"Swipe any Dynamic Island element left to hide it, including the screen recording, hotspot and call pills. Swipe right on the empty island to bring it back. \"Hide island when idle\" stops drawing the black pill around the sensors when nothing is shown. Applies immediately." = "任何動態島元件都能向左滑隱藏，包括螢幕錄影、個人熱點和通話的膠囊。在空的動態島上往右滑就叫回來。「空閒時隱藏動態島」會在沒東西顯示時不畫感測器外圍的黑色膠囊。立即生效。";
 "Hide island when idle" = "空閒時隱藏動態島";
 "© 2026 chxhua2k7. Licensed under GPL-3.0." = "© 2026 chxhua2k7。以 GPL-3.0 授權。";
 "Apply" = "套用";
 "Restart SpringBoard to apply?" = "要重啟 SpringBoard 套用嗎？";
 "Cancel" = "取消";
 "Respring" = "重啟";
+"Swipe any element left to hide it. Swipe right on the empty island to bring it back." = "任何元件都能向左滑隱藏，在空的動態島上往右滑叫回來。";
+"Leaves only the sensor cutouts when nothing is shown. Tap Apply after changing." = "沒東西顯示時只留下感測器的洞。切換後要按「套用」。";
