@@ -19,9 +19,10 @@
 // 空閒時隱藏(做法沿用 DynamicNotLand,verygenericname,GPL):
 //   兩個硬體缺口之間被塗黑的像素是 CAGainMapLayer 畫的,SpringBoard 建立的第一個 _SBGainMapView
 //   會變成 backboardd 顯示層級的遮罩(截圖截不到、alpha / hidden 都不理)。啟動時先在主畫面的
-//   SBRootSceneWindow 放一個 1x1 的 _SBGainMapView 佔掉這個名額,之後的 _SBGainMapView 都改用
-//   普通 CALayer(黑色背景),沒內容時就能用 opacity 淡出。佔位一定要放在 SBRootSceneWindow,放進
-//   別的 scene 或被別的 tweak 套 transform / 濾鏡都會讓 backboardd 的 gain encoder 崩潰。
+//   SBRootSceneWindow 放一個 1x1 的 _SBGainMapView 佔掉這個名額,其他 _SBGainMapView 保留真的
+//   CAGainMapLayer(換成普通 CALayer 會讓系統把感測器中央排除在命中範圍外,點不到),沒內容時
+//   用 layer.opacity 淡出即可。佔位一定要放在 SBRootSceneWindow,放進別的 scene 或被別的 tweak
+//   套 transform / 濾鏡都會讓 backboardd 的 gain encoder 崩潰。
 
 #import <UIKit/UIKit.h>
 #import <dlfcn.h>
@@ -70,13 +71,6 @@
 @property (atomic, assign) NSUInteger disableUpdateMask;
 @end
 
-// 普通 CALayer 假扮 CAGainMapLayer:SpringBoard 會對它設 renderMode 之類的屬性,吃掉就好。
-@interface ISFakeGainMapLayer : CALayer
-@property (nonatomic, copy) NSString *renderMode;
-@end
-@implementation ISFakeGainMapLayer
-@end
-
 #pragma mark - 狀態
 
 static NSString *const kISPrefsDomain = @"com.c3x14n.islandswipe";
@@ -84,6 +78,7 @@ static NSString *const kISReloadNotification = @"com.c3x14n.islandswipe/ReloadPr
 
 static BOOL gEnabled = YES;
 static BOOL gHideIdle = YES;
+
 
 // SystemApertureUI 匯出的 C 函式:元件 → 它的 layout overrider。
 static SAUILayoutSpecifyingOverrider *(*ISOverriderForElement)(id element);
@@ -97,7 +92,6 @@ static UIWindow *gUnhideWindow;
 
 // 空閒時隱藏
 static BOOL gHasContent = YES;
-static BOOL gFirstGainMapLayer;        // 下一個 layerClass 請求給真的 CAGainMapLayer(佔位 view)
 static UIView *gPlaceholderView;
 static NSHashTable *gGainMapViews;     // 佔位以外的 _SBGainMapView
 static NSHashTable *gCurtainViews;
@@ -232,7 +226,14 @@ static void ISUpdateUnhideWindow(void) {
 - (void)systemApertureViewController:(id)viewController containsAnyContent:(BOOL)containsAnyContent {
     %orig;
     gHasContent = containsAnyContent;
-    ISUpdateIdleHiding(YES);
+    if (containsAnyContent) {
+        ISUpdateIdleHiding(NO);   // 內容出現要馬上顯示
+    } else {
+        // 內容離開(例如展開成 App)先讓系統轉場跑完,再淡出;期間如果內容又回來就不動。
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (!gHasContent) ISUpdateIdleHiding(YES);
+        });
+    }
     dispatch_async(dispatch_get_main_queue(), ^{ ISUpdateUnhideWindow(); });
 }
 %end
@@ -287,9 +288,25 @@ static void ISUpdateUnhideWindow(void) {
 
 #pragma mark - 空閒時隱藏
 
+// 空閒時的黑色由 _containerSubBackgroundParent(每個 container 的 gain-map 背景、backdrop、key line)
+// 和 _containerBackgroundParent(curtain)畫;把這兩層整個淡出,container 縮回感測器大小時也不會把黑色帶回來。
+static NSArray<UIView *> *ISBackgroundParents(void) {
+    SBSystemApertureViewController *vc = gApertureVC;
+    if (!vc) return @[];
+    NSMutableArray *views = [NSMutableArray array];
+    for (NSString *name in @[@"_containerSubBackgroundParent", @"_containerBackgroundParent"]) {
+        Ivar ivar = class_getInstanceVariable(object_getClass(vc), name.UTF8String);
+        UIView *view = ivar ? object_getIvar(vc, ivar) : nil;
+        if ([view isKindOfClass:UIView.class]) [views addObject:view];
+    }
+    return views;
+}
+
 static void ISUpdateIdleHiding(BOOL animated) {
     CGFloat alpha = ISIdleHidden() ? 0 : 1;
+    NSArray *parents = ISBackgroundParents();
     void (^apply)(void) = ^{
+        for (UIView *view in parents) view.alpha = alpha;
         for (UIView *view in gContainerViews.allObjects) view.alpha = alpha;
         for (UIView *view in gGainMapViews.allObjects) view.layer.opacity = alpha;
         for (UIView *view in gCurtainViews.allObjects) view.layer.opacity = alpha;
@@ -312,27 +329,20 @@ static void ISUpdateIdleHiding(BOOL animated) {
     }
 #pragma clang diagnostic pop
     if (!host) return;
-    gFirstGainMapLayer = YES;
     gPlaceholderView = [[objc_getClass("_SBGainMapView") alloc] initWithFrame:CGRectMake(-1.3, -0.9, 1, 1)];
+    [gGainMapViews removeObject:gPlaceholderView];   // 佔位 view 要一直顯示,不跟著淡出
     gPlaceholderView.backgroundColor = nil;
     gPlaceholderView.userInteractionEnabled = NO;
+    gPlaceholderView.layer.opacity = 1;
     gPlaceholderView.layer.disableUpdateMask |= 18;
     [host addSubview:gPlaceholderView];
 }
 %end
 
 %hook _SBGainMapView
-+ (Class)layerClass {
-    if (gFirstGainMapLayer) {
-        gFirstGainMapLayer = NO;
-        return %orig;
-    }
-    return ISFakeGainMapLayer.class;
-}
 - (instancetype)initWithFrame:(CGRect)frame {
     self = %orig;
-    if (self && [self.layer isKindOfClass:ISFakeGainMapLayer.class]) {
-        self.backgroundColor = UIColor.blackColor;
+    if (self) {
         ISAddWeak(&gGainMapViews, self);
         self.layer.opacity = ISIdleHidden() ? 0 : 1;
     }
@@ -354,11 +364,6 @@ static void ISUpdateIdleHiding(BOOL animated) {
     ISAddWeak(&gContainerViews, self);
     CGFloat alpha = ISIdleHidden() ? 0 : 1;
     if (self.alpha != alpha) self.alpha = alpha;
-}
-// 空閒時不要把 container 縮回感測器大小(那個縮小動畫會把黑色帶回來)。
-- (void)setFrame:(CGRect)frame {
-    if (ISIdleHidden()) return;
-    %orig;
 }
 %end
 
