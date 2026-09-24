@@ -142,6 +142,7 @@ static BOOL ISIsStillHidden(id element) {
 }
 
 static void ISUpdateUnhideWindow(void);
+static void ISUpdateIdleHiding(BOOL animated);
 
 @interface ISUnhideView : UIView
 @end
@@ -162,7 +163,8 @@ static void ISUpdateUnhideWindow(void) {
     for (id element in gHiddenElements.allObjects) {
         if (!ISIsStillHidden(element)) [gHiddenElements removeObject:element];
     }
-    if (gHiddenElements.count == 0 || !gEnabled) {
+    // 只在動態島空著時放手勢視窗;有內容顯示時它會擋住元件的點擊(點了不會開 App)。
+    if (gHiddenElements.count == 0 || !gEnabled || gHasContent) {
         gUnhideWindow.hidden = YES;
         gUnhideWindow = nil;
         return;
@@ -224,6 +226,15 @@ static void ISUpdateUnhideWindow(void) {
     dispatch_async(dispatch_get_main_queue(), ^{ ISUpdateUnhideWindow(); });
 }
 
+%end
+
+%hook SBSystemApertureController
+- (void)systemApertureViewController:(id)viewController containsAnyContent:(BOOL)containsAnyContent {
+    %orig;
+    gHasContent = containsAnyContent;
+    ISUpdateIdleHiding(YES);
+    dispatch_async(dispatch_get_main_queue(), ^{ ISUpdateUnhideWindow(); });
+}
 %end
 
 // 元件被作廢就不能再叫回來了。
@@ -307,14 +318,6 @@ static void ISUpdateIdleHiding(BOOL animated) {
     gPlaceholderView.userInteractionEnabled = NO;
     gPlaceholderView.layer.disableUpdateMask |= 18;
     [host addSubview:gPlaceholderView];
-}
-%end
-
-%hook SBSystemApertureController
-- (void)systemApertureViewController:(id)viewController containsAnyContent:(BOOL)containsAnyContent {
-    %orig;
-    gHasContent = containsAnyContent;
-    ISUpdateIdleHiding(YES);
 }
 %end
 
