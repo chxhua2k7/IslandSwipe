@@ -44,6 +44,9 @@ static SAUILayoutSpecifyingOverrider *(*ISOverriderForElement)(id element);
 - (void)_axRevealHiddenElementIfPossible;
 @end
 
+@interface SBSystemApertureContainerView : UIView
+@end
+
 @interface SBAccessoryWindowScene : UIWindowScene
 @property (nonatomic) UIWindowScene *associatedWindowScene;
 @end
@@ -52,6 +55,10 @@ static NSString *const kISPrefsDomain = @"com.c3x14n.islandswipe";
 static NSString *const kISReloadNotification = @"com.c3x14n.islandswipe/ReloadPrefs";
 
 static BOOL gEnabled = YES;
+// 空閒時不畫黑色膠囊(只剩硬體的洞)。
+static BOOL gHideIdle = YES;
+static BOOL gHasContent = YES;
+static NSHashTable *gContainerViews;
 // 系統原本不准滑掉的元件(弱引用;元件消失就自動掉出)。
 static NSHashTable *gForcedElements;
 // 被我們設成 mode 0 隱藏、等著叫回來的元件(弱引用)。
@@ -64,10 +71,27 @@ static void ISLoadPrefs(void) {
     CFPropertyListRef value = CFPreferencesCopyAppValue(CFSTR("enabled"), (__bridge CFStringRef)kISPrefsDomain);
     gEnabled = value ? [(__bridge id)value boolValue] : YES;
     if (value) CFRelease(value);
+    CFPropertyListRef idle = CFPreferencesCopyAppValue(CFSTR("hideIdle"), (__bridge CFStringRef)kISPrefsDomain);
+    gHideIdle = idle ? [(__bridge id)idle boolValue] : YES;
+    if (idle) CFRelease(idle);
+}
+
+static CGFloat ISContainerAlpha(void) {
+    return (gEnabled && gHideIdle && !gHasContent) ? 0 : 1;
+}
+
+static void ISUpdateIdleHiding(BOOL animated) {
+    CGFloat alpha = ISContainerAlpha();
+    void (^apply)(void) = ^{
+        for (UIView *view in gContainerViews.allObjects) view.alpha = alpha;
+    };
+    if (animated) [UIView animateWithDuration:0.25 delay:0 options:UIViewAnimationOptionBeginFromCurrentState animations:apply completion:nil];
+    else apply();
 }
 
 static void ISPrefsChanged(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
     ISLoadPrefs();
+    dispatch_async(dispatch_get_main_queue(), ^{ ISUpdateIdleHiding(YES); });
 }
 
 static BOOL ISIsForced(id element) {
@@ -190,6 +214,25 @@ static void ISUpdateUnhideWindow(void) {
     dispatch_async(dispatch_get_main_queue(), ^{ ISUpdateUnhideWindow(); });
 }
 
+%end
+
+// 動態島有沒有內容:沒有時把 container view(空閒時那圈黑色膠囊)整個淡出。
+%hook SBSystemApertureController
+- (void)systemApertureViewController:(id)viewController containsAnyContent:(BOOL)containsAnyContent {
+    %orig;
+    gHasContent = containsAnyContent;
+    ISUpdateIdleHiding(YES);
+}
+%end
+
+%hook SBSystemApertureContainerView
+- (void)layoutSubviews {
+    %orig;
+    if (!gContainerViews) gContainerViews = [NSHashTable weakObjectsHashTable];
+    [gContainerViews addObject:self];
+    CGFloat alpha = ISContainerAlpha();
+    if (self.alpha != alpha) self.alpha = alpha;
+}
 %end
 
 %hook SBSystemApertureSceneElement
