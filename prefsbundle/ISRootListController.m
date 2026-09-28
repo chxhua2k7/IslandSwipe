@@ -92,7 +92,16 @@ static NSString *ISLocalized(NSString *key) {
 
 - (NSMutableArray *)specifiers {
     NSMutableArray *specifiers = [super specifiers];
-    for (PSSpecifier *specifier in specifiers) ISApplyIcon(specifier);
+    for (PSSpecifier *specifier in specifiers) {
+        ISApplyIcon(specifier);
+        // libprefs 的 PLCustomListController 會把沒有 bundle 路徑的 PSLinkCell 的 detail 類別
+        // 一律改成宿主類別(再用連結名稱找同名 plist);有明寫 detail 的連結把類別改回去。
+        NSString *detail = [specifier propertyForKey:@"detail"];
+        Class detailClass = [detail isKindOfClass:NSString.class] ? NSClassFromString(detail) : Nil;
+        if (detailClass && specifier.detailControllerClass != detailClass) {
+            [specifier setValue:detailClass forKey:@"detailControllerClass"];
+        }
+    }
     return specifiers;
 }
 

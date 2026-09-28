@@ -44,6 +44,16 @@
 @property (readonly, weak, nonatomic) id layoutSpecifyingOverridingTarget;
 @property (readonly, nonatomic) NSInteger layoutMode;
 @property (readonly, nonatomic) SAUIPreferredLayoutModeAssertion *preferredLayoutModeAssertion;
+- (void)setPreferredLayoutMode:(NSInteger)mode reason:(NSInteger)reason;
+@end
+
+@protocol ISElementInfo <NSObject>
+@optional
+- (NSString *)clientIdentifier;
+- (NSString *)elementIdentifier;
+- (id)associatedApplication;
+- (NSString *)_accessibilityLabel;
+- (NSString *)displayName;
 @end
 
 @interface SBSystemApertureViewController : UIViewController
@@ -78,6 +88,9 @@ static NSString *const kISReloadNotification = @"com.c3x14n.islandswipe/ReloadPr
 
 static BOOL gEnabled = YES;
 static BOOL gHideIdle = YES;
+// 自動隱藏的規則(元件 key,見 ISElementKey)和出現過的元件清單(給設定頁列出來勾選)。
+static NSSet<NSString *> *gAutoHide;
+static NSString *const kISSeenPath = @"/var/mobile/Library/Preferences/com.c3x14n.islandswipe.seen.plist";
 
 
 // SystemApertureUI 匯出的 C 函式:元件 → 它的 layout overrider。
@@ -104,6 +117,15 @@ static void ISLoadPrefs(void) {
     CFPropertyListRef hideIdle = CFPreferencesCopyAppValue(CFSTR("hideIdle"), (__bridge CFStringRef)kISPrefsDomain);
     gHideIdle = hideIdle ? [(__bridge id)hideIdle boolValue] : YES;
     if (hideIdle) CFRelease(hideIdle);
+    CFPropertyListRef rules = CFPreferencesCopyAppValue(CFSTR("autoHide"), (__bridge CFStringRef)kISPrefsDomain);
+    NSMutableSet *keys = [NSMutableSet set];
+    if ([(__bridge id)rules isKindOfClass:NSDictionary.class]) {
+        [(__bridge NSDictionary *)rules enumerateKeysAndObjectsUsingBlock:^(NSString *key, id on, BOOL *stop) {
+            if ([on respondsToSelector:@selector(boolValue)] && [on boolValue]) [keys addObject:key];
+        }];
+    }
+    gAutoHide = keys;
+    if (rules) CFRelease(rules);
 }
 
 static BOOL ISIdleHidden(void) {
@@ -187,6 +209,81 @@ static void ISUpdateUnhideWindow(void) {
     gUnhideWindow.hidden = NO;
 }
 
+#pragma mark - 自動隱藏指定元件
+
+// 規則 key:SpringBoard 自己的元件(充電、鎖定、熱點…)和 systemApertureElementIdentifier* 用 elementIdentifier,
+// App 的 Live Activity 用 bundle id(每次的 elementIdentifier 都不同)。
+static NSString *ISElementKey(id<ISElementInfo> element) {
+    NSString *elementID = [element respondsToSelector:@selector(elementIdentifier)] ? element.elementIdentifier : nil;
+    NSString *client = [element respondsToSelector:@selector(clientIdentifier)] ? element.clientIdentifier : nil;
+    if (client.length == 0 || [client isEqualToString:@"com.apple.springboard"]
+        || [elementID hasPrefix:@"systemApertureElementIdentifier"]) return elementID;
+    return client;
+}
+
+static NSString *ISElementName(id<ISElementInfo> element, NSString *key) {
+    if ([element respondsToSelector:@selector(associatedApplication)]) {
+        id app = element.associatedApplication;
+        if ([app respondsToSelector:@selector(displayName)]) {
+            NSString *name = [app displayName];
+            if (name.length) return name;
+        }
+    }
+    if ([element respondsToSelector:@selector(_accessibilityLabel)]) {
+        NSString *label = element._accessibilityLabel;
+        if (label.length) return label;
+    }
+    return key;
+}
+
+// 記到清單裡(設定頁讀這份 plist);只有新元件或名稱變了才寫檔。
+static void ISRecordSeen(id<ISElementInfo> element, NSString *key) {
+    NSString *name = ISElementName(element, key);
+    NSString *client = [element respondsToSelector:@selector(clientIdentifier)] ? element.clientIdentifier : nil;
+    NSString *elementID = [element respondsToSelector:@selector(elementIdentifier)] ? element.elementIdentifier : nil;
+    NSMutableDictionary *seen = [NSMutableDictionary dictionaryWithContentsOfFile:kISSeenPath] ?: [NSMutableDictionary dictionary];
+    NSDictionary *existing = seen[key];
+    if ([existing isKindOfClass:NSDictionary.class] && [existing[@"name"] isEqual:name]) return;
+    NSMutableDictionary *entry = [NSMutableDictionary dictionary];
+    entry[@"name"] = name;
+    if (client) entry[@"client"] = client;
+    if (elementID) entry[@"element"] = elementID;
+    entry[@"lastSeen"] = NSDate.date;
+    seen[key] = entry;
+    [seen writeToFile:kISSeenPath atomically:YES];
+}
+
+// 和往左滑同一條路:標成 forced、設成 mode 0(隱藏但仍註冊),往右滑一樣叫得回來。
+static void ISAutoHideElement(id element) {
+    SAUILayoutSpecifyingOverrider *overrider = ISOverriderForElement ? ISOverriderForElement(element) : nil;
+    if (!overrider) return;
+    ISAddWeak(&gForcedElements, element);
+    ISAddWeak(&gHiddenElements, element);
+    gHandlingResize = YES;
+    [overrider setPreferredLayoutMode:0 reason:3];
+    gHandlingResize = NO;
+    [gApertureVC.view setNeedsLayout];
+    dispatch_async(dispatch_get_main_queue(), ^{ ISUpdateUnhideWindow(); });
+}
+
+static NSHashTable *gRegisteredElements;   // 兩條註冊路徑都會經過,避免記兩次
+
+static void ISElementDidRegister(id element) {
+    if (!gEnabled || !element) return;
+    if ([gRegisteredElements containsObject:element]) return;
+    ISAddWeak(&gRegisteredElements, element);
+    NSString *key = ISElementKey(element);
+    if (!key.length) return;
+    ISRecordSeen(element, key);
+    if (![gAutoHide containsObject:key]) return;
+    // 等它排版好、overrider 建好再收(註冊當下還沒有)。
+    __weak id weakElement = element;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        id strong = weakElement;
+        if (strong && gEnabled && [gAutoHide containsObject:key]) ISAutoHideElement(strong);
+    });
+}
+
 %group SwipeHooks
 
 %hook SBSystemApertureViewController
@@ -213,6 +310,12 @@ static void ISUpdateUnhideWindow(void) {
     return NO;
 }
 
+- (id)registerElement:(id)element {
+    id assertion = %orig;
+    if (assertion) ISElementDidRegister(element);
+    return assertion;
+}
+
 - (void)_handleResizeResult:(NSInteger)result withContainerView:(id)containerView {
     gHandlingResize = gEnabled;
     %orig;
@@ -235,6 +338,15 @@ static void ISUpdateUnhideWindow(void) {
         });
     }
     dispatch_async(dispatch_get_main_queue(), ^{ ISUpdateUnhideWindow(); });
+}
+%end
+
+// 狀態列 pill(熱點、錄影…)的 provider 是透過 controller 註冊的。
+%hook SBSystemApertureController
+- (id)registerElement:(id)element {
+    id assertion = %orig;
+    if (assertion) ISElementDidRegister(element);
+    return assertion;
 }
 %end
 

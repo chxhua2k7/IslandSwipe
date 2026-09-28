@@ -24,7 +24,7 @@ include $(THEOS_MAKE_PATH)/tweak.mk
 # module map 自動連結(@rpath,Theos 的 rootless rpath 指到 /var/jb/usr/lib)。
 BUNDLE_NAME += IslandSwipePrefs
 
-IslandSwipePrefs_FILES += prefsbundle/ISRootListController.m
+IslandSwipePrefs_FILES += prefsbundle/ISRootListController.m prefsbundle/ISAutoHideListController.m
 IslandSwipePrefs_CFLAGS += -fobjc-arc -Wall -DIS_VERSION=\"$(PACKAGE_VERSION)\"
 IslandSwipePrefs_FRAMEWORKS += UIKit
 IslandSwipePrefs_PRIVATE_FRAMEWORKS += Preferences

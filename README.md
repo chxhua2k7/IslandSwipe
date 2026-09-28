@@ -11,6 +11,7 @@
 - 往左滑：任何元件都會收起（原本滑不掉的會被設成隱藏，不會被移除）。
 - 在**空的動態島**上往右滑：把最後一個被隱藏的元件叫回來（再滑一次叫下一個）。
 - 原本就能滑掉的 Live Activity 維持系統行為。
+- 「自動隱藏指定元件」：設定頁會列出在動態島出現過的元件（充電、鎖定、個人熱點、各 App 的 Live Activity…），打開的元件一出現就自動收起，往右滑仍叫得回來。
 - 「空閒時隱藏動態島」：沒東西顯示時只留下兩個感測器的洞，中間被塗黑的像素會露出來（做法沿用 [DynamicNotLand](https://github.com/verygenericname/DynamicNotLand)）。切換後要按右上角「套用」重啟。
 - 已知不相容：會對 SpringBoard 視窗套 transform／模糊的 tweak（例如 DuoFold）碰到這個選項的 gain-map 佔位 layer 會讓 backboardd 崩潰，兩者擇一。
 

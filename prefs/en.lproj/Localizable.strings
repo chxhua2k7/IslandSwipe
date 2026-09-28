@@ -12,3 +12,16 @@
 "Respring" = "Respring";
 "Swipe any element left to hide it. Swipe right on the empty island to bring it back." = "Swipe any element left to hide it. Swipe right on the empty island to bring it back.";
 "Leaves only the sensor cutouts when nothing is shown. Tap Apply after changing." = "Leaves only the sensor cutouts when nothing is shown. Tap Apply after changing.";
+"Auto-hide elements" = "Auto-hide elements";
+"Clear recorded elements" = "Clear recorded elements";
+"Nothing recorded yet." = "Nothing recorded yet.";
+"Elements appear here after they have shown in the Dynamic Island at least once. Enabled ones are hidden as soon as they appear; swipe right on the empty island to bring one back." = "Elements appear here after they have shown in the Dynamic Island at least once. Enabled ones are hidden as soon as they appear; swipe right on the empty island to bring one back.";
+"Lock" = "Lock";
+"Screen recording" = "Screen recording";
+"Charging" = "Charging";
+"Personal Hotspot" = "Personal Hotspot";
+"Location" = "Location";
+"Phone call" = "Phone call";
+"Microphone" = "Microphone";
+"Camera" = "Camera";
+"Navigation" = "Navigation";

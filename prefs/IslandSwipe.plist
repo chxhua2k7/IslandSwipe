@@ -45,6 +45,18 @@
 		</dict>
 		<dict>
 			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>detail</key>
+			<string>ISAutoHideListController</string>
+			<key>iconColor</key>
+			<string>#FF9F0A</string>
+			<key>iconSymbol</key>
+			<string>eye.slash.fill</string>
+			<key>label</key>
+			<string>Auto-hide elements</string>
+		</dict>
+		<dict>
+			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>footerText</key>
 			<string>Leaves only the sensor cutouts when nothing is shown. Tap Apply after changing.</string>
@@ -61,7 +73,7 @@
 			<key>iconColor</key>
 			<string>#5E5CE6</string>
 			<key>iconSymbol</key>
-			<string>eye.slash.fill</string>
+			<string>circle.dashed</string>
 			<key>key</key>
 			<string>hideIdle</string>
 			<key>label</key>

@@ -12,3 +12,16 @@
 "Respring" = "重启";
 "Swipe any element left to hide it. Swipe right on the empty island to bring it back." = "任何元素都能向左滑隐藏，在空的灵动岛上向右滑叫回。";
 "Leaves only the sensor cutouts when nothing is shown. Tap Apply after changing." = "没有内容显示时只保留传感器的开孔。切换后需点「应用」。";
+"Auto-hide elements" = "自动隐藏指定元素";
+"Clear recorded elements" = "清除记录的元素";
+"Nothing recorded yet." = "还没有记录到任何元素。";
+"Elements appear here after they have shown in the Dynamic Island at least once. Enabled ones are hidden as soon as they appear; swipe right on the empty island to bring one back." = "元素至少在灵动岛出现过一次才会列在这里。打开的元素一出现就自动收起；在空的灵动岛上向右滑可以叫回。";
+"Lock" = "锁定";
+"Screen recording" = "屏幕录制";
+"Charging" = "充电";
+"Personal Hotspot" = "个人热点";
+"Location" = "定位";
+"Phone call" = "通话";
+"Microphone" = "麦克风";
+"Camera" = "相机";
+"Navigation" = "导航";
